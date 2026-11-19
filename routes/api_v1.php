@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\Master\{BankController, BlockController, ChartOfAccountController,
     StreetController, VillageController, WorkAreaController, ZoneController};
+use App\Http\Controllers\Api\V1\Property\ResidentController;
+use App\Http\Controllers\Api\V1\Shared\RegionController;
 
 Route::get('ping', fn () => response()->json([
     'data' => [
@@ -53,5 +55,26 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
                 ->middleware('permission:master.manage');
         }
     });
+    
+    Route::prefix('regions')->group(function () {
+        Route::get('provinces', [RegionController::class, 'provinces']);
+        Route::get('cities', [RegionController::class, 'cities']);
+        Route::get('districts', [RegionController::class, 'districts']);
+        Route::get('villages', [RegionController::class, 'villages']);
+    });
 
+    Route::middleware('permission:residents.view')->group(function () {
+        Route::get('residents', [ResidentController::class, 'index']);
+        Route::get('residents/{id}', [ResidentController::class, 'show'])->whereNumber('id');
+        Route::get('residents/{id}/nik', [ResidentController::class, 'revealNik'])->whereNumber('id');
+        Route::get('residents/{id}/photo', [ResidentController::class, 'photo'])->whereNumber('id');
+    });
+
+    Route::middleware('permission:residents.manage')->group(function () {
+        Route::post('residents', [ResidentController::class, 'store']);
+        Route::put('residents/{id}', [ResidentController::class, 'update'])->whereNumber('id');
+        Route::patch('residents/{id}/active', [ResidentController::class, 'setActive'])->whereNumber('id');
+        Route::post('residents/{id}/photo', [ResidentController::class, 'storePhoto'])->whereNumber('id');
+        Route::delete('residents/{id}/photo', [ResidentController::class, 'destroyPhoto'])->whereNumber('id');
+    });
 });
