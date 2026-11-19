@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\V1\Master\{BankController, BlockController, ChartOfAccountController,
+    StreetController, VillageController, WorkAreaController, ZoneController};
 
 Route::get('ping', fn () => response()->json([
     'data' => [
@@ -29,5 +31,27 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::delete('sessions/others', [ProfileController::class, 'revokeOtherSessions']);
     });
 
-    // Tahap 2 dan seterusnya: semua endpoint modul ditaruh di grup ini
+    Route::prefix('master')->group(function () {
+        $masters = [
+            'blocks'            => BlockController::class,
+            'streets'           => StreetController::class,
+            'zones'             => ZoneController::class,
+            'villages'          => VillageController::class,
+            'work-areas'        => WorkAreaController::class,
+            'banks'             => BankController::class,
+            'chart-of-accounts' => ChartOfAccountController::class,
+        ];
+
+        foreach ($masters as $path => $controller) {
+            Route::apiResource($path, $controller)
+                ->parameters([$path => 'id'])
+                ->only(['index', 'show']);
+
+            Route::apiResource($path, $controller)
+                ->parameters([$path => 'id'])
+                ->only(['store', 'update', 'destroy'])
+                ->middleware('permission:master.manage');
+        }
+    });
+
 });
