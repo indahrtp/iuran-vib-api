@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Property\ResidentRequest;
 use App\Http\Resources\Property\ResidentResource;
 use App\Models\Resident;
+use App\Models\Unit;
 use App\Services\Shared\RegionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,18 +25,22 @@ class ResidentController extends Controller
     public function index(Request $request)
     {
         $request->validate([
-            'search'       => ['nullable', 'string', 'max:100'],
-            'is_active'    => ['nullable', 'boolean'],
-            'gender'       => ['nullable', Rule::enum(Gender::class)],
-            'village_code' => ['nullable', 'string', 'max:10'],
-            'per_page'     => ['nullable', 'integer', 'min:1', 'max:100'],
+            'search'            => ['nullable', 'string', 'max:100'],
+            'is_active'         => ['nullable', 'boolean'],
+            'gender'            => ['nullable', Rule::enum(Gender::class)],
+            'village_code'      => ['nullable', 'string', 'max:10'],
+            'profile_status'    => ['nullable', 'in:owner,occupant,both'],
+            'per_page'          => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $residents = Resident::query()
+            ->withProfileStatus()
+            ->havingProfileStatus($request->input('profile_status'))
             ->search($request->input('search'))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
             ->when($request->filled('gender'), fn ($q) => $q->where('gender', $request->input('gender')))
             ->when($request->filled('village_code'), fn ($q) => $q->where('village_code', $request->input('village_code')))
+            ->when($request->filled('profile_status'), fn ($q) => $q->havingProfileStatus($request->input('profile_status')))
             ->orderBy('name')
             ->paginate($request->integer('per_page', 15));
 
@@ -44,7 +49,7 @@ class ResidentController extends Controller
 
     public function show(int $id): ResidentResource
     {
-        return $this->present(Resident::findOrFail($id));
+        return $this->present(Resident::withProfileStatus()->findOrFail($id));
     }
 
     public function store(ResidentRequest $request, SaveResidentAction $action): JsonResponse
@@ -105,5 +110,25 @@ class ResidentController extends Controller
     {
         return (new ResidentResource($resident))
             ->withRegion($this->regions->resolveVillage($resident->village_code));
+    }
+
+    public function units(int $id): JsonResponse
+    {
+        Resident::findOrFail($id);
+
+        $units = Unit::with(['street', 'block'])
+            ->where(fn ($q) => $q->where('owner_id', $id)->orWhere('occupant_id', $id))
+            ->get()
+            ->map(fn (Unit $u) => [
+                'id'              => $u->id,
+                'address'         => $u->addressLabel(),
+                'is_owner'        => $u->owner_id === $id,
+                'is_occupant'     => $u->occupant_id === $id,
+                'is_guarantor'    => $u->guarantorId() === $id,
+                'building_status' => $u->building_status?->value,
+                'is_vacant_land'  => $u->is_vacant_land,
+            ]);
+
+        return response()->json(['data' => $units]);
     }
 }

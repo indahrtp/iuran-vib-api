@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Resident extends Model
 {
@@ -78,5 +79,42 @@ class Resident extends Model
                 }
             });
         });
+    }
+
+    public function ownedUnits(): HasMany { return $this->hasMany(Unit::class, 'owner_id'); }
+    public function occupiedUnits(): HasMany { return $this->hasMany(Unit::class, 'occupant_id'); }
+
+    /** Muat penanda pemilik/penghuni dalam satu query (hindari N+1) */
+    public function scopeWithProfileStatus(Builder $query): Builder
+    {
+        return $query->withExists(['ownedUnits as is_owner', 'occupiedUnits as is_occupant']);
+    }
+
+    public function scopeHavingProfileStatus(Builder $query, ?string $status): Builder
+    {
+        return $query->when($status, function (Builder $q) use ($status) {
+            match ($status) {
+                'owner'    => $q->whereHas('ownedUnits')->whereDoesntHave('occupiedUnits'),
+                'occupant' => $q->whereHas('occupiedUnits')->whereDoesntHave('ownedUnits'),
+                'both'     => $q->whereHas('ownedUnits')->whereHas('occupiedUnits'),
+                default    => null,
+            };
+        });
+    }
+
+    /** 'owner' | 'occupant' | 'both' | null. Dihitung dari unit, tidak disimpan */
+    public function profileStatus(): ?string
+    {
+        $isOwner = array_key_exists('is_owner', $this->attributes)
+            ? (bool) $this->attributes['is_owner'] : $this->ownedUnits()->exists();
+        $isOccupant = array_key_exists('is_occupant', $this->attributes)
+            ? (bool) $this->attributes['is_occupant'] : $this->occupiedUnits()->exists();
+
+        return match (true) {
+            $isOwner && $isOccupant => 'both',
+            $isOwner => 'owner',
+            $isOccupant => 'occupant',
+            default => null,
+        };
     }
 }

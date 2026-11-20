@@ -19,6 +19,10 @@ class DatabaseSeeder extends Seeder
             RolePermissionSeeder::class,
             AdminUserSeeder::class,
             MasterDataSeeder::class,
+            WaterTariffSeeder::class,
+            IplRateSeeder::class,
+            PenaltySettingSeeder::class,
+            OtherFeeSeeder::class,
         ]);
     }
 }
